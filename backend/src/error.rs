@@ -21,6 +21,7 @@ pub enum AppError {
     BadRequest(String),
 
     #[error("{0}")]
+    #[allow(dead_code)]
     NotFound(String),
 
     #[error("{0}")]

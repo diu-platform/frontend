@@ -18,6 +18,10 @@ pub struct Config {
     pub port: u16,
     /// Arbitrum RPC endpoint for alloy/event listener.
     pub chain_rpc_url: String,
+    /// DIURegistry contract address on Arbitrum Sepolia.
+    pub registry_contract_address: String,
+    /// Deployer private key for on-chain verify_researcher calls (never logged).
+    pub deployer_private_key: String,
 }
 
 impl Config {
@@ -50,12 +54,20 @@ impl Config {
         let chain_rpc_url = env::var("CHAIN_RPC_URL")
             .unwrap_or_else(|_| "https://sepolia-rollup.arbitrum.io/rpc".to_string());
 
+        let registry_contract_address = env::var("REGISTRY_CONTRACT_ADDRESS")
+            .unwrap_or_else(|_| "0x49e1b11e1037e74113a7c0ccc41e3042d4691018".to_string());
+
+        let deployer_private_key = env::var("DEPLOYER_PRIVATE_KEY")
+            .map_err(|_| anyhow::anyhow!("DEPLOYER_PRIVATE_KEY is required"))?;
+
         Ok(Config {
             database_url,
             jwt_secret,
             cors_origins,
             port,
             chain_rpc_url,
+            registry_contract_address,
+            deployer_private_key,
         })
     }
 }

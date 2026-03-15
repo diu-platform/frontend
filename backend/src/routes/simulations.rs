@@ -1,3 +1,5 @@
+#![allow(dead_code)] // stub — будет подключён в B-3
+
 use axum::{
     extract::Path,
     http::StatusCode,

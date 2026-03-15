@@ -1,3 +1,5 @@
+#![allow(dead_code)] // stub — будет подключён в B-3
+
 use axum::{http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};

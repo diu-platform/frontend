@@ -84,6 +84,7 @@ pub fn issue_jwt(address: &str, secret: &str) -> Result<(String, u64), AppError>
 }
 
 /// Validate a JWT and return its claims.
+#[allow(dead_code)] // used by middleware extractor, referenced in B-1
 pub fn validate_jwt(token: &str, secret: &str) -> Result<Claims, AppError> {
     let data = decode::<Claims>(
         token,

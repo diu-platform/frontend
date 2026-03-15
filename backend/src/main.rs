@@ -59,10 +59,15 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Database connected");
 
     let state = AppState {
-        db,
+        db: db.clone(),
         config: config.clone(),
         nonces: Arc::new(Mutex::new(HashMap::new())),
     };
+
+    // Spawn ORCID verification worker (ADR D-030 / B-2).
+    let verifier = registry::worker::OrcidVerifier::new(db, config.clone());
+    tokio::spawn(verifier.run());
+    tracing::info!("ORCID verifier worker spawned");
 
     let app = build_router(state, &config);
 

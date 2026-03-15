@@ -17,6 +17,7 @@ use crate::{auth::service, error::AppError, AppState};
 
 /// Authenticated user extracted from a valid `Authorization: Bearer <jwt>` header.
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // used in protected route handlers in B-1
 pub struct AuthUser {
     /// Ethereum address (lowercase, 0x-prefixed) from JWT `sub` claim.
     pub address: String,

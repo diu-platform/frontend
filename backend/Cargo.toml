@@ -26,6 +26,7 @@ async-trait = "0.1"
 siwe = "0.6"
 jsonwebtoken = "9"
 alloy-primitives = "0.7"
+alloy = { version = "0.7", features = ["providers", "rpc-types", "contract", "signer-local"] }
 rand = "0.8"
 
 # Utilities
