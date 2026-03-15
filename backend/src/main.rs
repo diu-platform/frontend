@@ -16,6 +16,7 @@ mod auth;
 mod config;
 mod db;
 mod error;
+mod mcp;
 mod middleware;
 mod models;
 mod progress;
@@ -97,6 +98,8 @@ fn build_router(state: AppState, config: &config::Config) -> Router {
         .nest("/api/v1/progress", progress::routes::router())
         // Reputation (DDD: reputation context — stub, B-2 wires alloy)
         .nest("/api/v1/reputation", reputation::routes::router())
+        // MCP Physics Server — JSON-RPC 2.0 (ADR D-020, D-023)
+        .nest("/mcp", mcp::routes::router())
         // AI assistant (legacy, to be replaced by MCP in B-3)
         .route("/api/v1/ai/ask", axum::routing::post(routes::ai::ask_question))
         // Auth (SIWE + JWT)
