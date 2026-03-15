@@ -1,0 +1,148 @@
+//! Progress HTTP routes.
+//!
+//! Moved from routes/progress.rs — logic unchanged.
+//! TODO B-2: replace mock with PostgreSQL reads/writes using AuthUser extractor.
+
+use axum::{
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
+};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+use crate::AppState;
+
+/// Build the progress sub-router (`/api/v1/progress` prefix applied in main.rs).
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .route("/", get(get_progress))
+        .route("/", post(save_progress))
+}
+
+/// Get user progress (mock — TODO B-2: query PostgreSQL for authenticated user)
+async fn get_progress() -> Json<UserProgress> {
+    Json(UserProgress {
+        user_id: "demo-user".to_string(),
+        completed_simulations: vec![],
+        current_simulation: None,
+        total_time_minutes: 0,
+        achievements: vec![],
+        last_activity: Utc::now(),
+    })
+}
+
+/// Save user progress (mock — TODO B-2: persist to PostgreSQL)
+async fn save_progress(
+    Json(request): Json<SaveProgressRequest>,
+) -> Result<Json<UserProgress>, StatusCode> {
+    tracing::info!(
+        "Saving progress: simulation={}, completed={}",
+        request.simulation_id,
+        request.completed
+    );
+
+    let achievements = check_achievements(&request);
+    let parameters = request.parameters.clone();
+
+    let progress = UserProgress {
+        user_id: "demo-user".to_string(),
+        completed_simulations: if request.completed {
+            vec![CompletedSimulation {
+                simulation_id: request.simulation_id.clone(),
+                completed_at: Utc::now(),
+                score: request.score,
+                time_spent_minutes: request.time_spent_minutes,
+            }]
+        } else {
+            vec![]
+        },
+        current_simulation: if !request.completed {
+            Some(CurrentSimulation {
+                simulation_id: request.simulation_id,
+                started_at: Utc::now(),
+                last_parameters: parameters,
+            })
+        } else {
+            None
+        },
+        total_time_minutes: request.time_spent_minutes,
+        achievements,
+        last_activity: Utc::now(),
+    };
+
+    Ok(Json(progress))
+}
+
+fn check_achievements(request: &SaveProgressRequest) -> Vec<Achievement> {
+    let mut achievements = vec![];
+
+    if request.completed {
+        achievements.push(Achievement {
+            id: "first-experiment".to_string(),
+            name: "First Experiment".to_string(),
+            description: "Completed your first quantum physics simulation".to_string(),
+            icon: "🔬".to_string(),
+            earned_at: Utc::now(),
+        });
+    }
+
+    if let Some(score) = request.score {
+        if score >= 90.0 {
+            achievements.push(Achievement {
+                id: "quantum-master".to_string(),
+                name: "Quantum Master".to_string(),
+                description: "Achieved a score of 90% or higher".to_string(),
+                icon: "🏆".to_string(),
+                earned_at: Utc::now(),
+            });
+        }
+    }
+
+    achievements
+}
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct UserProgress {
+    pub user_id: String,
+    pub completed_simulations: Vec<CompletedSimulation>,
+    pub current_simulation: Option<CurrentSimulation>,
+    pub total_time_minutes: u32,
+    pub achievements: Vec<Achievement>,
+    pub last_activity: DateTime<Utc>,
+}
+
+#[derive(Serialize)]
+pub struct CompletedSimulation {
+    pub simulation_id: String,
+    pub completed_at: DateTime<Utc>,
+    pub score: Option<f64>,
+    pub time_spent_minutes: u32,
+}
+
+#[derive(Serialize)]
+pub struct CurrentSimulation {
+    pub simulation_id: String,
+    pub started_at: DateTime<Utc>,
+    pub last_parameters: Option<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+pub struct Achievement {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub icon: String,
+    pub earned_at: DateTime<Utc>,
+}
+
+#[derive(Deserialize)]
+pub struct SaveProgressRequest {
+    pub simulation_id: String,
+    pub completed: bool,
+    pub score: Option<f64>,
+    pub time_spent_minutes: u32,
+    pub parameters: Option<serde_json::Value>,
+}

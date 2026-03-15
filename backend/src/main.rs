@@ -1,9 +1,6 @@
 //! DIU OS Backend — production Axum server (B-1).
 
-use axum::{
-    routing::{get, post},
-    Json, Router,
-};
+use axum::{routing::get, Json, Router};
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{
@@ -21,8 +18,12 @@ mod db;
 mod error;
 mod middleware;
 mod models;
+mod progress;
+mod registry;
+mod reputation;
 mod routes;
 mod services;
+mod simulations;
 
 /// In-memory nonce store: address → (nonce, issued_at).
 ///
@@ -80,21 +81,19 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn build_router(state: AppState, config: &config::Config) -> Router {
-    // CORS: restrict to configured origins in production
     let cors = build_cors(config);
 
     let app: Router<AppState> = Router::new()
         // Health check
         .route("/health", get(health_check))
-        // Legacy simulation routes (kept as-is for MVP)
-        .route("/api/v1/simulations", get(routes::simulations::list_simulations))
-        .route("/api/v1/simulations/:id", get(routes::simulations::get_simulation))
-        .route("/api/v1/simulations/:id/run", post(routes::simulations::run_simulation))
+        // Simulations (DDD: simulations context)
+        .nest("/api/v1/simulations", simulations::routes::router())
+        // Progress (DDD: progress context)
+        .nest("/api/v1/progress", progress::routes::router())
+        // Reputation (DDD: reputation context — stub, B-2 wires alloy)
+        .nest("/api/v1/reputation", reputation::routes::router())
         // AI assistant (legacy, to be replaced by MCP in B-3)
-        .route("/api/v1/ai/ask", post(routes::ai::ask_question))
-        // Progress (legacy mock, will use DB in next step)
-        .route("/api/v1/progress", get(routes::progress::get_progress))
-        .route("/api/v1/progress", post(routes::progress::save_progress))
+        .route("/api/v1/ai/ask", axum::routing::post(routes::ai::ask_question))
         // Auth (SIWE + JWT)
         .nest("/auth", auth::routes::router())
         .layer(TraceLayer::new_for_http())
