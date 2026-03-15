@@ -1,20 +1,46 @@
+//! DIU OS Backend — production Axum server (B-1).
+
 use axum::{
     routing::{get, post},
     Json, Router,
 };
 use serde::Serialize;
-use std::net::SocketAddr;
-use tower_http::cors::{Any, CorsLayer};
-use tower_http::trace::TraceLayer;
+use sqlx::PgPool;
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod routes;
+mod auth;
+mod config;
+mod db;
+mod error;
+mod middleware;
 mod models;
+mod routes;
 mod services;
 
+/// In-memory nonce store: address → (nonce, issued_at).
+///
+/// Nonces expire after 5 minutes (checked on verify).
+/// Single-server only — migrate to Redis/DB for multi-instance Phase 3.
+pub type NonceStore = Arc<Mutex<HashMap<String, (String, Instant)>>>;
+
+/// Shared application state injected into all Axum handlers.
+#[derive(Clone)]
+pub struct AppState {
+    pub db: PgPool,
+    pub config: Arc<config::Config>,
+    pub nonces: NonceStore,
+}
+
 #[tokio::main]
-async fn main() {
-    // Initialize tracing
+async fn main() -> anyhow::Result<()> {
+    // Tracing setup
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -23,40 +49,76 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Load environment variables
+    // Load env and config
     dotenvy::dotenv().ok();
+    let config = Arc::new(config::Config::from_env()?);
 
-    // Build our application with routes
-    let app = Router::new()
+    // Database pool
+    let db = db::create_pool(&config).await?;
+    tracing::info!("Database connected");
+
+    let state = AppState {
+        db,
+        config: config.clone(),
+        nonces: Arc::new(Mutex::new(HashMap::new())),
+    };
+
+    let app = build_router(state, &config);
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+    tracing::info!("DIU OS backend listening on {addr}");
+
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to bind {addr}: {e}"))?;
+
+    axum::serve(listener, app)
+        .await
+        .map_err(|e| anyhow::anyhow!("Server error: {e}"))?;
+
+    Ok(())
+}
+
+fn build_router(state: AppState, config: &config::Config) -> Router {
+    // CORS: restrict to configured origins in production
+    let cors = build_cors(config);
+
+    let app: Router<AppState> = Router::new()
         // Health check
         .route("/health", get(health_check))
-        // API routes
+        // Legacy simulation routes (kept as-is for MVP)
         .route("/api/v1/simulations", get(routes::simulations::list_simulations))
         .route("/api/v1/simulations/:id", get(routes::simulations::get_simulation))
         .route("/api/v1/simulations/:id/run", post(routes::simulations::run_simulation))
-        // AI assistant
+        // AI assistant (legacy, to be replaced by MCP in B-3)
         .route("/api/v1/ai/ask", post(routes::ai::ask_question))
-        // User progress
+        // Progress (legacy mock, will use DB in next step)
         .route("/api/v1/progress", get(routes::progress::get_progress))
         .route("/api/v1/progress", post(routes::progress::save_progress))
-        // Middleware
+        // Auth (SIWE + JWT)
+        .nest("/auth", auth::routes::router())
         .layer(TraceLayer::new_for_http())
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
-        );
+        .layer(cors);
 
-    // Run server
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
-    tracing::info!("🚀 Physics Tutorial API listening on {}", addr);
-    
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    app.with_state(state)
 }
 
-/// Health check endpoint
+fn build_cors(config: &config::Config) -> CorsLayer {
+    use axum::http::{HeaderValue, Method};
+    use tower_http::cors::AllowOrigin;
+
+    let origins: Vec<HeaderValue> = config
+        .cors_origins
+        .iter()
+        .filter_map(|o| HeaderValue::from_str(o).ok())
+        .collect();
+
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list(origins))
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers(tower_http::cors::Any)
+}
+
 async fn health_check() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok".to_string(),
