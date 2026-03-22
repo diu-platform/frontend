@@ -25,21 +25,16 @@ An interactive web application for learning quantum physics through real-time 3D
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) 1.75+
-- [Docker](https://docs.docker.com/get-docker/) (optional, for database)
+- [Docker](https://docs.docker.com/get-docker/) (optional, for local API)
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/desci-intelligent-universe/physics-tutorial.git
+git clone https://github.com/diu-os/physics-tutorial.git
 cd physics-tutorial
 
-# Start backend
-cd backend
-cargo run
-
-# In another terminal, start frontend
+# Start frontend
 cd frontend
 npm install
 npm run dev
@@ -51,31 +46,30 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ```
 physics-tutorial/
-├── backend/                 # Rust API server (Axum)
-│   ├── src/
-│   │   ├── main.rs         # Entry point
-│   │   ├── routes/         # API endpoints
-│   │   ├── models/         # Data structures
-│   │   └── services/       # Business logic
-│   └── Cargo.toml
 ├── frontend/                # React + Three.js
 │   ├── src/
-│   │   ├── components/     # UI components
+│   │   ├── components/     # UI components (27 components)
 │   │   ├── simulations/    # Physics simulations
 │   │   ├── hooks/          # Custom React hooks
 │   │   └── App.tsx
 │   └── package.json
-├── docs/                    # Documentation
-└── docker-compose.yml       # Local development
+└── docs/                    # Documentation
 ```
+
+## Backend
+
+The backend (Axum + PostgreSQL + ORCID OAuth) is maintained in a
+private repository. Contact the maintainer for access.
+
+API: https://api.diu-os.org
 
 ## 🛠️ Tech Stack
 
 | Layer | Technology |
 |-------|------------|
 | **Frontend** | React 18, TypeScript, Three.js, Tailwind CSS |
-| **Backend** | Rust, Axum, SQLx, PostgreSQL |
-| **AI** | OpenAI API / Local LLM |
+| **Backend** | Rust, Axum, SQLx, PostgreSQL (private repo) |
+| **AI** | Claude API (Quantum persona) |
 | **Infrastructure** | Docker, GitHub Actions |
 
 ## 📖 Documentation
