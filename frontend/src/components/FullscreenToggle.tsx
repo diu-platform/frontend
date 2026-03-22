@@ -58,6 +58,8 @@ export function FullscreenToggle({ targetRef, onFullscreenChange }: FullscreenTo
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
       if (e.key === 'f' || e.key === 'F' || e.key === 'а' || e.key === 'А') {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();

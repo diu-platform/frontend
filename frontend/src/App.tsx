@@ -22,6 +22,7 @@ import { ModeInfoPanel } from './components/ModeInfoPanel';
 import { ScientificCredits, CreditsButton } from './components/ScientificCredits';
 import { LanguageProvider, useLanguage, LanguageSwitcher } from './i18n/LanguageContext';
 import { useSimulationState } from './hooks/useSimulationState';
+import { QuantumTutor } from './components/QuantumTutor';
 
 function AppContent() {
   const { t, language } = useLanguage();
@@ -48,6 +49,19 @@ function AppContent() {
     handleReset,
     handleExport,
   } = useSimulationState();
+
+  const simulationContext = (() => {
+    switch (currentExperiment) {
+      case 'doubleSlit':
+        return `Experiment: double-slit. wavelength=${params.wavelength}nm, slit_distance=${params.slitDistance}, slit_width=${params.slitWidth}, observer=${params.observerOn ? 'on' : 'off'}, mode=${currentMode}`;
+      case 'tunneling':
+        return `Experiment: tunneling. particle_energy=${tunnelingParams.particleEnergy}, barrier_height=${tunnelingParams.barrierHeight}, barrier_width=${tunnelingParams.barrierWidth}`;
+      case 'hydrogen':
+        return `Experiment: hydrogen. n=${hydrogenParams.n}, l=${hydrogenParams.l}, m=${hydrogenParams.m}`;
+      default:
+        return undefined;
+    }
+  })();
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white overflow-hidden">
@@ -107,6 +121,8 @@ function AppContent() {
 
         <SimulationCanvas
           currentExperiment={currentExperiment}
+          showTutor
+          simulationContext={simulationContext}
           params={params}
           screenMode={screenMode}
           resetKey={resetKey}
@@ -157,6 +173,7 @@ function AppContent() {
         isOpen={showCredits}
         onClose={() => setShowCredits(false)}
       />
+
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 
 import { FullscreenToggle, FullscreenOverlay, MinimalFullscreenControls } from './FullscreenToggle';
 import { CanvasOverlayInfo } from './CanvasOverlayInfo';
+import { QuantumTutor } from './QuantumTutor';
 
 import DoubleSlit from '../simulations/DoubleSlit';
 import type { DoubleSlitParams, DoubleSlitStats } from '../simulations/DoubleSlit';
@@ -35,6 +36,8 @@ interface SimulationCanvasProps {
   setIsFullscreen: (v: boolean) => void;
   cameraDistance: number;
   canvasContainerRef: React.RefObject<HTMLDivElement>;
+  showTutor?: boolean;
+  simulationContext?: string;
 }
 
 export function SimulationCanvas({
@@ -54,6 +57,8 @@ export function SimulationCanvas({
   setIsFullscreen,
   cameraDistance,
   canvasContainerRef,
+  showTutor,
+  simulationContext,
 }: SimulationCanvasProps) {
   return (
     <div className={`flex-1 relative ${isFullscreen ? 'w-full' : ''}`} ref={canvasContainerRef}>
@@ -134,6 +139,8 @@ export function SimulationCanvas({
         tunnelingStats={tunnelingStats}
         hydrogenStats={hydrogenStats}
       />
+
+      {showTutor && <QuantumTutor experiment={currentExperiment} simulationContext={simulationContext} />}
     </div>
   );
 }
