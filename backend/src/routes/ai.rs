@@ -1,5 +1,17 @@
-use axum::{http::StatusCode, Json};
+use axum::{extract::{ConnectInfo, State}, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
+
+use crate::{error::AppError, middleware::auth::OptionalAuthUser, AppState};
+
+// ─── Daily chat limits ────────────────────────────────────────────────────────
+
+/// Anonymous users (identified by IP): 5 requests per day.
+const LIMIT_ANONYMOUS: u32 = 5;
+/// SIWE (wallet) users: 10 requests per day.
+const LIMIT_SIWE: u32 = 10;
+/// ORCID users (researchers): 20 requests per day.
+const LIMIT_ORCID: u32 = 20;
 
 /// Handle AI questions about physics
 pub async fn ask_question(
@@ -148,6 +160,159 @@ fn get_suggested_experiments(question: &str) -> Vec<SuggestedExperiment> {
     } else {
         vec![]
     }
+}
+
+/// POST /api/chat — Quantum AI Tutor via Anthropic Claude API.
+///
+/// Daily rate limits enforced via `chat_usage` table:
+/// - Anonymous (by IP):  5 requests/day
+/// - SIWE (wallet):     10 requests/day
+/// - ORCID (researcher): 20 requests/day
+///
+/// Returns a fallback message if ANTHROPIC_API_KEY is absent (local dev).
+///
+/// Note: ConnectInfo gives the direct TCP peer address. In production behind a
+/// reverse proxy, configure the proxy to pass `X-Real-IP` and read it here (Phase 3).
+pub async fn chat(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    OptionalAuthUser(opt_user): OptionalAuthUser,
+    Json(req): Json<ChatRequest>,
+) -> Result<Json<ChatResponse>, AppError> {
+    // ── 1. Determine identifier and daily limit ───────────────────────────────
+    let (identifier, limit): (String, u32) = match &opt_user {
+        Some(user) if user.login_method == "orcid" => {
+            let id = user.orcid_id.clone().unwrap_or_else(|| user.sub.clone());
+            (id, LIMIT_ORCID)
+        }
+        Some(user) => {
+            let addr_str = user.address.clone().unwrap_or_else(|| user.sub.clone());
+            (addr_str, LIMIT_SIWE)
+        }
+        None => (addr.ip().to_string(), LIMIT_ANONYMOUS),
+    };
+
+    // ── 2. Check current usage ────────────────────────────────────────────────
+    let row = sqlx::query!(
+        "SELECT count FROM chat_usage WHERE identifier = $1 AND date = CURRENT_DATE",
+        identifier
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(format!("Rate limit DB read failed: {e}")))?;
+
+    let current = row.map(|r| r.count).unwrap_or(0);
+
+    if current >= limit as i32 {
+        return Err(AppError::RateLimit(limit));
+    }
+
+    // ── 3. Call Anthropic API ─────────────────────────────────────────────────
+    let api_key = match &state.config.anthropic_api_key {
+        Some(k) => k.clone(),
+        None => {
+            return Ok(Json(ChatResponse {
+                reply: "AI-тьютор временно недоступен. Установи ANTHROPIC_API_KEY на сервере."
+                    .to_string(),
+            }));
+        }
+    };
+
+    let experiment_context = match req.experiment.as_deref() {
+        Some("doubleSlit") => " The user is currently watching the **Double-Slit experiment** simulation (wave/particle duality, interference pattern, detector toggle).",
+        Some("tunneling")  => " The user is currently watching the **Quantum Tunneling** simulation (barrier height/width, transmission probability, WKB approximation).",
+        Some("hydrogen")   => " The user is currently watching the **Hydrogen Atom** simulation (3D electron orbitals, quantum numbers n/l/m, probability clouds).",
+        _ => "",
+    };
+
+    let sim_context_prefix = req
+        .sim_context
+        .as_deref()
+        .map(|ctx| format!("[Current simulation: {ctx}]\n"))
+        .unwrap_or_default();
+
+    let system = format!(
+        "{sim_context_prefix}{}{experiment_context}",
+        state.config.quantum_system_prompt
+    );
+
+    let messages: Vec<serde_json::Value> = req
+        .history
+        .iter()
+        .map(|m| serde_json::json!({ "role": m.role, "content": m.content }))
+        .chain(std::iter::once(
+            serde_json::json!({ "role": "user", "content": req.message }),
+        ))
+        .collect();
+
+    let body = serde_json::json!({
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 512,
+        "system": system,
+        "messages": messages,
+    });
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", &api_key)
+        .header("anthropic-version", "2023-06-01")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| AppError::BadGateway(format!("Anthropic request failed: {e}")))?;
+
+    if !res.status().is_success() {
+        return Err(AppError::BadGateway("Anthropic API error".to_string()));
+    }
+
+    let data: serde_json::Value = res
+        .json()
+        .await
+        .map_err(|e| AppError::BadGateway(format!("Invalid Anthropic response: {e}")))?;
+
+    let reply = data["content"][0]["text"]
+        .as_str()
+        .unwrap_or("Нет ответа.")
+        .to_string();
+
+    // ── 4. Increment usage counter (only on success) ──────────────────────────
+    sqlx::query!(
+        r#"
+        INSERT INTO chat_usage (identifier, date, count)
+        VALUES ($1, CURRENT_DATE, 1)
+        ON CONFLICT (identifier, date) DO UPDATE
+            SET count = chat_usage.count + 1
+        "#,
+        identifier
+    )
+    .execute(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(format!("Rate limit DB write failed: {e}")))?;
+
+    Ok(Json(ChatResponse { reply }))
+}
+
+#[derive(Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Deserialize)]
+pub struct ChatRequest {
+    pub message: String,
+    pub history: Vec<ChatMessage>,
+    /// Currently active simulation: "doubleSlit" | "tunneling" | "hydrogen"
+    pub experiment: Option<String>,
+    /// Current simulation parameters as a human-readable string, e.g.
+    /// "Experiment: double-slit. wavelength=550nm, slit_distance=0.3, ..."
+    pub sim_context: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ChatResponse {
+    pub reply: String,
 }
 
 #[derive(Deserialize)]

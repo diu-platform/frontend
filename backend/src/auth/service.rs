@@ -63,15 +63,19 @@ pub async fn verify_siwe(
 
 // ─── JWT ─────────────────────────────────────────────────────────────────────
 
-/// Issue a signed JWT for the given Ethereum address.
-pub fn issue_jwt(address: &str, secret: &str) -> Result<(String, u64), AppError> {
+/// Issue a signed JWT for the given subject identifier and login method.
+///
+/// `sub`: Ethereum address for SIWE, `orcid:<id>` for ORCID.
+/// `login_method`: "siwe" | "orcid" | "email".
+pub fn issue_jwt(sub: &str, secret: &str, login_method: &str) -> Result<(String, u64), AppError> {
     let now = unix_now();
     let exp = now + JWT_TTL_SECS;
 
     let claims = Claims {
-        sub: address.to_lowercase(),
+        sub: sub.to_lowercase(),
         iat: now,
         exp,
+        login_method: login_method.to_string(),
     };
 
     let token = encode(

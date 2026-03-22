@@ -79,9 +79,12 @@ async fn main() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to bind {addr}: {e}"))?;
 
-    axum::serve(listener, app)
-        .await
-        .map_err(|e| anyhow::anyhow!("Server error: {e}"))?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Server error: {e}"))?;
 
     Ok(())
 }
@@ -100,6 +103,8 @@ fn build_router(state: AppState, config: &config::Config) -> Router {
         .nest("/api/v1/reputation", reputation::routes::router())
         // MCP Physics Server — JSON-RPC 2.0 (ADR D-020, D-023)
         .nest("/mcp", mcp::routes::router())
+        // Quantum AI Tutor (calls Anthropic Claude via server-side key)
+        .route("/api/chat", axum::routing::post(routes::ai::chat))
         // AI assistant (legacy, to be replaced by MCP in B-3)
         .route("/api/v1/ai/ask", axum::routing::post(routes::ai::ask_question))
         // Auth (SIWE + JWT)

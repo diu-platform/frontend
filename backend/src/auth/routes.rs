@@ -1,12 +1,13 @@
-//! Auth HTTP routes: POST /auth/challenge, POST /auth/verify.
+//! Auth HTTP routes: SIWE, ORCID OAuth, email magic-link (stub), /me.
 //!
-//! Rate limiting: 10 req/min per IP (tower_governor applied to this router).
+//! Rate limiting: 10 req/min per IP on sensitive mutation endpoints.
 
 use axum::{
     extract::State,
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
+use serde::Deserialize;
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -17,8 +18,11 @@ use tower_governor::{
 
 use crate::{
     auth::{
-        models::{ChallengeRequest, ChallengeResponse, VerifyRequest, VerifyResponse},
-        service,
+        models::{
+            ChallengeRequest, ChallengeResponse, EmailRequestResponse,
+            VerifyRequest, VerifyResponse,
+        },
+        orcid, service,
     },
     error::AppError,
     AppState,
@@ -26,21 +30,31 @@ use crate::{
 
 /// Build the auth sub-router (`/auth` prefix applied in main.rs).
 pub fn router() -> Router<AppState> {
-    // 10 requests per minute per IP, burst of 5
+    // 10 requests per minute per IP, burst of 5 — applied to sensitive POST routes only.
     let governor_conf = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(6)   // 10 req/min ≈ 1 req/6 s
+            .per_second(6) // 10 req/min ≈ 1 req/6 s
             .burst_size(5)
             .finish()
             .expect("valid governor config"),
     );
 
-    Router::new()
+    let rate_limited = Router::new()
         .route("/challenge", post(challenge))
         .route("/verify", post(verify))
+        .route("/email/request", post(email_request))
         .layer(GovernorLayer {
             config: governor_conf,
-        })
+        });
+
+    // ORCID OAuth redirect/callback and /me are not rate-limited
+    // (ORCID callback is triggered by orcid.org servers; /me is a cheap JWT read).
+    let open = Router::new()
+        .route("/orcid", get(orcid::orcid_login))
+        .route("/orcid/callback", get(orcid::orcid_callback))
+        .route("/me", get(orcid::me));
+
+    rate_limited.merge(open)
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -126,11 +140,33 @@ async fn verify(
     }
 
     // Issue JWT
-    let (token, expires_at) = service::issue_jwt(&address, &state.config.jwt_secret)?;
+    let (token, expires_at) = service::issue_jwt(&address, &state.config.jwt_secret, "siwe")?;
 
     Ok(Json(VerifyResponse {
         token,
         address,
         expires_at,
+        login_method: "siwe".to_string(),
     }))
+}
+
+// ─── POST /auth/email/request — Phase 3 stub ─────────────────────────────────
+
+/// Request body for email magic-link (Phase 3).
+#[derive(Deserialize)]
+struct EmailRequestBody {
+    #[allow(dead_code)]
+    email: String,
+}
+
+/// POST /auth/email/request — Phase 3 stub.
+///
+/// Accepts an email and returns a "not implemented" status.
+/// Exists so the route is registered for future magic-link implementation.
+async fn email_request(
+    Json(_body): Json<EmailRequestBody>,
+) -> Json<EmailRequestResponse> {
+    Json(EmailRequestResponse {
+        status: "not_implemented_yet".to_string(),
+    })
 }
