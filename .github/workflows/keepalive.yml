@@ -1,0 +1,15 @@
+name: Keepalive — diu-os-backend
+on:
+  schedule:
+    - cron: '*/25 * * * *'  # каждые 25 минут
+  workflow_dispatch:         # ручной запуск
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health
+        run: |
+          curl -s --max-time 15 \
+            https://diu-os-backend.fly.dev/health
+          echo "Backend pinged at $(date)"
