@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
-    base: './',
+    base: '/',
     build: {
       outDir: 'dist',
       sourcemap: true,
