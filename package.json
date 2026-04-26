@@ -1,0 +1,55 @@
+{
+  "name": "diu-physics-interactive",
+  "version": "0.15.13",
+  "description": "Interactive 3D Quantum Physics Simulations - Educational Platform",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test": "vitest run --passWithNoTests"
+  },
+  "keywords": [
+    "quantum-physics",
+    "education",
+    "3d-simulation",
+    "double-slit",
+    "wave-particle-duality",
+    "threejs",
+    "react",
+    "desci"
+  ],
+  "author": "DIU Team <science@diu-os.dev>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/desci-intelligent-universe/diu-physics.git"
+  },
+  "homepage": "https://diu-os.dev/physics",
+  "dependencies": {
+    "@react-three/drei": "^9.88.0",
+    "@react-three/fiber": "^8.15.0",
+    "lucide-react": "^0.294.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "three": "^0.158.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@types/three": "^0.158.0",
+    "@typescript-eslint/eslint-plugin": "^6.10.0",
+    "@typescript-eslint/parser": "^6.10.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.53.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.4",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.3.5",
+    "typescript": "^5.2.2",
+    "vite": "^6.4.1",
+    "vitest": "^4.1.0"
+  }
+}
