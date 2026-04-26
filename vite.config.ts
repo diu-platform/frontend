@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const apiUrl = mode === 'production' 
+    ? 'https://diu-platform-backend.fly.dev'
+    : 'http://localhost:3001'
   
   return {
     plugins: [react()],
@@ -15,14 +18,14 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         '/api': {
-          target: env.VITE_API_URL || 'https://diu-platform-backend.fly.dev',
+          target: apiUrl,
           changeOrigin: true,
-          secure: true,
+          secure: mode !== 'development',
         },
       },
     },
     define: {
-      'import.meta.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL || 'https://diu-platform-backend.fly.dev'),
+      'import.meta.env.VITE_API_URL': JSON.stringify(apiUrl),
     },
   }
 })
